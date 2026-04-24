@@ -3,6 +3,7 @@ import pygame
 import numpy as np
 from sensors import VehicleSensors
 from keyboardControl import VehicleControl
+from props import scatter_props
 
 
 def main():
@@ -32,6 +33,7 @@ def main():
         spawn_point = world.get_map().get_spawn_points()[0]
         vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 
+        scatter_props(world)
         controller = VehicleControl(world, vehicle)
         sensors = VehicleSensors(world, vehicle)
         
@@ -58,29 +60,32 @@ def main():
                 depth_m = (R + G * 256.0 + B * 256.0 * 256.0) / (256.0**3 - 1) * 1000.0
 
                 h, w = depth_m.shape
-                roi = depth_m[int(h * 0.45):int(h * 0.55), int(w * 0.10):int(w * 0.90)]
+                roi = depth_m[int(h * 0.45):int(h * 0.55):3, int(w * 0.10):int(w * 0.90):3]
 
-                EXPECTED_ROAD_DISTANCE = 1.0
-                
-                depression_map = roi - EXPECTED_ROAD_DISTANCE
+                baseline = np.median(roi, axis=1, keepdims=True)
+                display_baseline = float(np.median(roi))
+                                
+                depression_map = roi - baseline
             
-                DEPRESSION_THRESHOLD_M = 1.4  
-                MIN_AREA = 150
+                DEPRESSION_THRESHOLD_M = 0.15  
+                
+                deepest_point = float(np.max(depression_map))
 
-                depressed_pixels = depression_map > DEPRESSION_THRESHOLD_M
-                area = int(np.sum(depressed_pixels))
+                # depressed_pixels = depression_map > DEPRESSION_THRESHOLD_M
+                # area = int(np.sum(depressed_pixels))
 
-                # current_max_depth = float(np.max(depression_map))
-                # print(f"Deepest Point: {current_max_depth:.2f}m | Trigger Area: {area}px / {MIN_AREA}px")
-                if area > MIN_AREA:
-                    sensors.pothole_detected = True
-                    sensors.depression_depth = float(np.max(depression_map[depressed_pixels]))
-                    sensors.depression_area = area
+                print(f"Road Baseline: {display_baseline:.2f}m | Deepest Hole: {deepest_point:.2f}m")
+                if deepest_point > DEPRESSION_THRESHOLD_M:
+                    sensors.anomaly_frame_count +=1
+
+                    if sensors.anomaly_frame_count >= 2:
+                        sensors.pothole_detected = True
+                        sensors.depression_depth = deepest_point
                     
                 else:
                     sensors.pothole_detected = False
                     sensors.depression_depth = 0.0
-                    sensors.depression_area = 0
+                    sensors.anomaly_frame_count = 0
             
             #trigger logic
             zImu = sensors.z_acceleration - 9.81
@@ -96,11 +101,10 @@ def main():
                     print("Both sensors hit")
                 elif tof_hit:
                     print("TOF sensor hit")
+                    if sensors.gs_data is not None:
+                        sensors.gs_data.save_to_disk(f'_out/anomaly_{sensors.gs_data.frame}.png')
                 else:
-                    print("IMU sensor hit")
-
-                if sensors.gs_data is not None:
-                    sensors.gs_data.save_to_disk(f'_out/anomaly_{sensors.gs_data.frame}.png')
+                    print("IMU sensor hit")      
 
                 cooldown = 60
             

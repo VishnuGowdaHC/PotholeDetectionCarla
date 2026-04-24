@@ -16,7 +16,7 @@ class VehicleSensors():
         self.raw_tof = None
         self.pothole_detected = False
         self.depression_depth = 0.0
-        self.depression_area = 0
+        self.anomaly_frame_count = 0
 
     
     def _master_sensor_catcher(self, data, sensor_type):
