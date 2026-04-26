@@ -1,9 +1,12 @@
 import carla
 import pygame
+import math
 import numpy as np
 from sensors import VehicleSensors
 from keyboardControl import VehicleControl
 from props import scatter_props
+from map.minimap import data_queue, extractBaseMap
+
 
 
 def main():
@@ -25,29 +28,53 @@ def main():
     try:
         settings = world.get_settings()
         settings.synchronous_mode = True
-        settings.fixed_delta_seconds = 0.0166
+        settings.fixed_delta_seconds = 0.0285
         world.apply_settings(settings)
 
         blueprint_lib = world.get_blueprint_library()
         vehicle_bp = blueprint_lib.filter('vehicle.tesla.model3')[0]
         spawn_point = world.get_map().get_spawn_points()[0]
         vehicle = world.spawn_actor(vehicle_bp, spawn_point)
+        
+
+        traffic_manager = client.get_trafficmanager(8050)
+        traffic_manager.set_synchronous_mode(True)
+        traffic_manager.ignore_lights_percentage(vehicle, 100)
+        traffic_manager.ignore_signs_percentage(vehicle, 100)
+        traffic_manager.keep_slow_lane_rule_percentage(vehicle, 0)
+        traffic_manager.vehicle_percentage_speed_difference(vehicle, -130)
+        traffic_manager.distance_to_leading_vehicle(vehicle, 0.5)
+        
+
+        map = extractBaseMap(world)
+        data_queue.put({"type": "init_map", "data": map})
+        print("init map sent to queue")
 
         scatter_props(world)
+
         controller = VehicleControl(world, vehicle)
         sensors = VehicleSensors(world, vehicle)
         
         sensors.setup()
         clock = pygame.time.Clock()
-
-        cooldown = 0
+        
+        vehicle.set_autopilot(True, 8050)
+        tof_cooldown = 0
+        imu_cooldown = 0
         EXPECTED_ROAD_DISTANCE = None
 
         while True:
             world.tick()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return
+                
             if controller.tick(clock):
                 break
-
+            
+            transform = vehicle.get_transform()
+            location = transform.location
+            yaw_rad = math.radians(transform.rotation.yaw)
             
             #tof
             if sensors.raw_tof is not None:
@@ -74,7 +101,7 @@ def main():
                 # depressed_pixels = depression_map > DEPRESSION_THRESHOLD_M
                 # area = int(np.sum(depressed_pixels))
 
-                print(f"Road Baseline: {display_baseline:.2f}m | Deepest Hole: {deepest_point:.2f}m")
+                # print(f"Road Baseline: {display_baseline:.2f}m | Deepest Hole: {deepest_point:.2f}m")
                 if deepest_point > DEPRESSION_THRESHOLD_M:
                     sensors.anomaly_frame_count +=1
 
@@ -91,22 +118,45 @@ def main():
             zImu = sensors.z_acceleration - 9.81
 
             tof_hit = sensors.pothole_detected
-            imu_hit = zImu < -2.5
+            imu_hit = abs(zImu) > 1.5
 
-            if cooldown > 0:
-                cooldown -= 1
+            if tof_cooldown > 0:
+                tof_cooldown -= 1
+            if imu_cooldown > 0:
+                imu_cooldown -= 1
 
-            if (tof_hit or imu_hit) and cooldown == 0:
-                if tof_hit and imu_hit:
+            if (tof_hit or imu_hit):
+                hit_x = location.x
+                hit_y = -location.y
+                
+                if tof_hit and imu_hit and tof_cooldown == 0 and imu_cooldown == 0:
                     print("Both sensors hit")
-                elif tof_hit:
-                    print("TOF sensor hit")
-                    if sensors.gs_data is not None:
-                        sensors.gs_data.save_to_disk(f'_out/anomaly_{sensors.gs_data.frame}.png')
-                else:
-                    print("IMU sensor hit")      
+                    data_queue.put({'type': 'both_loc',
+                                    'x': hit_x,
+                                    'y': hit_y,})
+                    tof_cooldown = imu_cooldown = 60
 
-                cooldown = 60
+                elif tof_hit and tof_cooldown == 0:
+                    print("TOF sensor hit") 
+
+                    corrected_x = location.x + (9.02 * math.cos(yaw_rad))    
+                    corrected_y = location.y + (9.02 * math.sin(yaw_rad)) 
+                    data_queue.put({'type': 'tof_loc',
+                                    'x': corrected_x,
+                                    'y': -corrected_y,})
+                    tof_cooldown = 60
+
+                elif imu_hit and imu_cooldown == 0:
+                    print("IMU sensor hit") 
+                    data_queue.put({'type': 'imu_loc',
+                                    'x': hit_x,
+                                    'y': hit_y,})  
+                    imu_cooldown = 60
+
+                if tof_hit and sensors.gs_data is not None:
+                        sensors.gs_data.save_to_disk(f'_out/anomaly_{sensors.gs_data.frame}.png')   
+
+                
             
             if sensors.raw_preview is not None:
                 p_image = sensors.raw_preview
@@ -115,9 +165,6 @@ def main():
                 p_array = p_array[:, :, :3]
                 p_array = p_array[:, :, ::-1]
                 surface = pygame.surfarray.make_surface(p_array.swapaxes(0,1))
-
-                if surface.get_size() != display.get_size():
-                    surface = pygame.transform.scale(surface, display.get_size())
 
                 display.blit(surface, (0, 0))
 

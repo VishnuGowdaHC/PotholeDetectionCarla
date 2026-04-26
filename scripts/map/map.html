@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CARLA Telemetry Dashboard</title>
+    <style>
+        body { background-color: #d1a38e; color: white; display:flex; flex-direction: column;  align-items: center; font-family: sans-serif; display: flex; flex-direction: column; }
+        canvas { border: 1px solid #4d4d4d; margin-bottom: 100px;}
+    </style>
+</head>
+<body>
+
+    
+    <div style="display:flex; flex-direction:row; align-items:center; gap:15px; color:white; font-size:16px;">
+        <h2>Live Simulation Map</h2>
+        <div style="display:flex; align-items:center;">
+        <span style="width:12px; height:12px; background:red; border-radius:50%; display:inline-block; margin-right:6px;  box-shadow: 0 0 8px red, 0 0 16px red;"></span>
+        IMU
+        </div>
+
+        <div style="display:flex; align-items:center;">
+        <span style="width:12px; height:12px; background:#00aaff; border-radius:50%; display:inline-block; margin-right:6px;"></span>
+        TOF
+        </div>
+    </div>
+    <div style="display: flex; flex-direction: row; align-items: center; justify-content: center; position: relative; width: 100vw; height: 100vh;">
+        <canvas id="mapCanvas" width="700" height="700" style="position: absolute; z-index: 1; "></canvas>
+        <canvas id="heatCanvas" width="700" height="700" style="position: absolute; z-index: 2;"></canvas>
+    </div>
+
+    <script>
+        const mapCtx = document.getElementById('mapCanvas').getContext('2d');
+        const heatCtx = document.getElementById('heatCanvas').getContext('2d');
+
+        // 1. Change from 'const' to 'let' so the dynamic bounds calculation can update these globally
+        let SCALE = 0.5;
+        let OFFSET_X = 400;
+        let OFFSET_Y = 400;
+        let mapDrawn = false; // We use this to stop redrawing the map every second
+
+        function drawMap(segments) {
+            if (mapDrawn) return; // Performance fix: Only draw the map once
+
+            mapCtx.clearRect(0, 0, 700, 700);
+
+            // Find bounds
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+
+            segments.forEach(seg => {
+                [seg.start, seg.end].forEach(p => {
+                    minX = Math.min(minX, p.x);
+                    maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxY = Math.max(maxY, p.y);
+                });
+            });
+
+            // Update the GLOBAL variables so drawHit() uses the exact same math
+            const padding = 100;
+            const scaleX = (700 - padding) / (maxX - minX);
+            const scaleY = (700 - padding) / (maxY - minY);
+            SCALE = Math.min(scaleX, scaleY);
+            OFFSET_X = -minX * SCALE + padding / 2;
+            OFFSET_Y = -minY * SCALE + padding / 2;
+
+            console.log("Map Bounds:", { minX, maxX, minY, maxY });
+            console.log("Global Scale set to:", SCALE);
+
+            // Draw the actual roads
+            mapCtx.strokeStyle = "rgba(255, 255, 255)"; 
+            mapCtx.lineWidth = 11;
+            mapCtx.beginPath();
+
+            // Loop through ALL segments, drawing lines from start to end
+            segments.forEach(seg => {
+                const startX = seg.start.x * SCALE + OFFSET_X;
+                const startY = seg.start.y * SCALE + OFFSET_Y;
+                const endX = seg.end.x * SCALE + OFFSET_X;
+                const endY = seg.end.y * SCALE + OFFSET_Y;
+
+                mapCtx.moveTo(startX, startY);
+                mapCtx.lineTo(endX, endY);
+            });
+
+            mapCtx.stroke();
+            mapDrawn = true; // Lock it so it doesn't redraw next polling cycle
+        }
+
+        function drawHit(hit) {
+            // This now perfectly uses the dynamically calculated SCALE and OFFSET
+            const x = hit.x * SCALE + OFFSET_X;
+            const y = hit.y * SCALE + OFFSET_Y;
+            
+            heatCtx.globalCompositeOperation = "lighter";
+            heatCtx.beginPath();
+
+            let grad;
+            if (hit.type === "tof_loc") {
+                heatCtx.fillStyle = "rgba(0, 100, 255, 1)";
+                heatCtx.arc(x, y, 5, 0, Math.PI * 2);
+            } else if (hit.type === "imu_loc") {
+                grad = heatCtx.createRadialGradient(x, y, 0, x, y, 15);
+                grad.addColorStop(0, "rgba(255, 50, 0, 0.8)");
+                grad.addColorStop(1, "rgba(255, 50, 0, 0)");
+                heatCtx.fillStyle = grad;
+                heatCtx.arc(x, y, 90, 0, Math.PI * 2);
+            } else if (hit.type === "both_loc") {
+                grad = heatCtx.createRadialGradient(x, y, 0, x, y, 20);
+                grad.addColorStop(0, "rgba(255, 255, 255, 1)");
+                grad.addColorStop(0.2, "rgba(255, 0, 255, 0.8)");
+                grad.addColorStop(1, "rgba(255, 0, 255, 0)");
+                heatCtx.fillStyle = grad;
+                heatCtx.arc(x, y, 90, 0, Math.PI * 2);
+            } else return;
+            
+            heatCtx.fill();
+            heatCtx.globalCompositeOperation = "source-over";
+        }
+
+        async function poll() {
+            try {
+                const res = await fetch("../potholes.json?t=" + Date.now());
+                const data = await res.json();
+
+                // Pass the map data if it exists
+                if (data.map && data.map.length > 0) {
+                    drawMap(data.map);
+                }
+
+                heatCtx.clearRect(0, 0, 700, 700);
+                if (data.hits) {
+                    data.hits.forEach(drawHit);
+                }
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        setInterval(poll, 1000);
+        poll();
+    </script>
+</body>
+</html>
