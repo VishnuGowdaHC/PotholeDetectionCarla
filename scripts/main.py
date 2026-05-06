@@ -6,6 +6,7 @@ from sensors import VehicleSensors
 from keyboardControl import VehicleControl
 from props import scatter_props
 from map.minimap import data_queue, extractBaseMap
+from sensors import imageQueue
 
 
 
@@ -139,11 +140,15 @@ def main():
                 elif tof_hit and tof_cooldown == 0:
                     print("TOF sensor hit") 
 
-                    corrected_x = location.x + (9.02 * math.cos(yaw_rad))    
-                    corrected_y = location.y + (9.02 * math.sin(yaw_rad)) 
+                    corrected_x = hit_x + (4.70 * math.cos(yaw_rad))    
+                    corrected_y = hit_y + (4.70 * math.sin(yaw_rad)) 
+
                     data_queue.put({'type': 'tof_loc',
                                     'x': corrected_x,
-                                    'y': -corrected_y,})
+                                    'y': corrected_y,})
+                    
+                    filename = f'_out/anomaly_{sensors.gs_data.frame}.png'
+                    imageQueue.put((sensors.gs_data, filename))
                     tof_cooldown = 60
 
                 elif imu_hit and imu_cooldown == 0:
@@ -153,10 +158,6 @@ def main():
                                     'y': hit_y,})  
                     imu_cooldown = 60
 
-                if tof_hit and sensors.gs_data is not None:
-                        sensors.gs_data.save_to_disk(f'_out/anomaly_{sensors.gs_data.frame}.png')   
-
-                
             
             if sensors.raw_preview is not None:
                 p_image = sensors.raw_preview

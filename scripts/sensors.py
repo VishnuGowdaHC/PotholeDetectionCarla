@@ -2,6 +2,8 @@ import carla
 import math
 import numpy as np
 import pygame
+import threading
+import queue
 
 class VehicleSensors():
     def __init__(self, world, vehicle):
@@ -85,4 +87,15 @@ class VehicleSensors():
             if sensor.is_alive:
                 sensor.stop()
                 sensor.destroy()
+
+
+imageQueue = queue.Queue()
+
+def image_saver_thread():
+    while True:
+        carla_image, filename = imageQueue.get()
+        carla_image.save_to_disk(filename)
+        imageQueue.task_done()
+
+threading.Thread(target=image_saver_thread, daemon=True).start()
 
