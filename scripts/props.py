@@ -14,9 +14,9 @@ def scatter_props(world):
     for wp in waypoints[:10]:
         base_location = wp.transform.location
         offsets = [
-            (-0.8, -0.8), (0.0, -0.8), (0.8, -0.8), # Back row
-            (-0.8,  0.0), (0.0,  0.0), (0.8,  0.0), # Middle row
-            (-0.8,  0.8), (0.0,  0.8), (0.8,  0.8)  # Front row
+            (-0.8, -0.8), (0.0, -0.8), (0.8, -0.8), 
+            (-0.8,  0.0), (0.0,  0.0), (0.8,  0.0), 
+            (-0.8,  0.8), (0.0,  0.8), (0.8,  0.8) 
         ]
 
         for offset_x, offset_y in offsets:  

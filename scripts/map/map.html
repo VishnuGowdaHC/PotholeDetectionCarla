@@ -32,14 +32,13 @@
         const mapCtx = document.getElementById('mapCanvas').getContext('2d');
         const heatCtx = document.getElementById('heatCanvas').getContext('2d');
 
-        // 1. Change from 'const' to 'let' so the dynamic bounds calculation can update these globally
         let SCALE = 0.5;
         let OFFSET_X = 400;
         let OFFSET_Y = 400;
-        let mapDrawn = false; // We use this to stop redrawing the map every second
+        let mapDrawn = false; 
 
         function drawMap(segments) {
-            if (mapDrawn) return; // Performance fix: Only draw the map once
+            if (mapDrawn) return; 
 
             mapCtx.clearRect(0, 0, 700, 700);
 
@@ -56,7 +55,6 @@
                 });
             });
 
-            // Update the GLOBAL variables so drawHit() uses the exact same math
             const padding = 100;
             const scaleX = (700 - padding) / (maxX - minX);
             const scaleY = (700 - padding) / (maxY - minY);
@@ -84,7 +82,7 @@
             });
 
             mapCtx.stroke();
-            mapDrawn = true; // Lock it so it doesn't redraw next polling cycle
+            mapDrawn = true; 
         }
 
         function drawHit(hit) {

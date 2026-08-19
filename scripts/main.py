@@ -91,7 +91,7 @@ def main():
                 roi = depth_m[int(h * 0.45):int(h * 0.55):3, int(w * 0.10):int(w * 0.90):3]
 
                 baseline = np.median(roi, axis=1, keepdims=True)
-                display_baseline = float(np.median(roi))
+                #display_baseline = float(np.median(roi))
                                 
                 depression_map = roi - baseline
             
@@ -99,10 +99,10 @@ def main():
                 
                 deepest_point = float(np.max(depression_map))
 
-                # depressed_pixels = depression_map > DEPRESSION_THRESHOLD_M
-                # area = int(np.sum(depressed_pixels))
+                #depressed_pixels = depression_map > DEPRESSION_THRESHOLD_M
+                #area = int(np.sum(depressed_pixels))
 
-                # print(f"Road Baseline: {display_baseline:.2f}m | Deepest Hole: {deepest_point:.2f}m")
+                #print(f"Road Baseline: {display_baseline:.2f}m | Deepest point: {deepest_point:.2f}m")
                 if deepest_point > DEPRESSION_THRESHOLD_M:
                     sensors.anomaly_frame_count +=1
 
