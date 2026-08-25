@@ -28,7 +28,7 @@ Transfer-learned MobileNetV2, fine-tuned after epoch 10. Final: **~84% train acc
 
 ## Tech Stack
 
-Python, TFLite INT8 MobileNetV2, PyTorch (training), Firebase Realtime Database, CARLA (Town02), pygame.
+Python, TFLite INT8 MobileNetV2, CARLA (Town02).
 
 ## Recognition
 
